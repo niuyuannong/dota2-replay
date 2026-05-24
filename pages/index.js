@@ -30,11 +30,16 @@ function processMatch(match, focusSlot) {
   const players = match.players;
   const slot = Math.min(focusSlot, players.length - 1);
   const p = players[slot];
-  const isRadiant = slot < 5;
+  // OpenDota: player_slot 0-127=天辉, 128-255=夜魇
+  const isRadiant = (p.player_slot !== undefined) ? p.player_slot < 128 : slot < 5;
   const won = isRadiant ? match.radiant_win : !match.radiant_win;
 
-  const teamPlayers = players.filter((_, i) => isRadiant ? i < 5 : i >= 5);
-  const enemyPlayers = players.filter((_, i) => isRadiant ? i >= 5 : i < 5);
+  const teamPlayers = players.filter(x =>
+    x.player_slot !== undefined ? (x.player_slot < 128) === isRadiant : true
+  );
+  const enemyPlayers = players.filter(x =>
+    x.player_slot !== undefined ? (x.player_slot < 128) !== isRadiant : false
+  );
   const teamKills = teamPlayers.reduce((s,x) => s+(x.kills||0), 0);
   const teamNW = teamPlayers.reduce((s,x) => s+(x.net_worth||0), 0);
   const enemyNW = enemyPlayers.reduce((s,x) => s+(x.net_worth||0), 0);
@@ -58,7 +63,8 @@ function processMatch(match, focusSlot) {
       slot: i, heroName: getHeroName(x.hero_id),
       kills:x.kills||0, deaths:x.deaths||0, assists:x.assists||0,
       gpm:x.gold_per_min||0, netWorth:x.net_worth||0,
-      isTeam: isRadiant ? i<5 : i>=5, isFocus: i===slot,
+      isTeam: x.player_slot !== undefined ? (x.player_slot < 128) === isRadiant : i<5,
+      isFocus: i===slot,
     }))
   };
 }
@@ -85,21 +91,34 @@ ${s.allPlayers.map(p =>
 经济差：我方 ${s.teamNW.toLocaleString()} vs 敌方 ${s.enemyNW.toLocaleString()}（${s.nwDiff>0?"+":""}${s.nwDiff.toLocaleString()}）
 
 ---
-请按以下结构输出（Markdown 格式）：
+请严格按以下结构输出，每个章节都必须有实质内容，不能留空：
 
 ### 🎯 本局评分
-1-10分 + 一句话理由
+**X/10** - 一句话理由（结合本局最突出的表现）
 
 ### ✅ 做得好的地方
-2-3条亮点，结合具体数据
+- **亮点1**：具体描述，引用数据
+- **亮点2**：具体描述，引用数据
+- **亮点3**：具体描述，引用数据
 
 ### ⚠️ 主要失误分析
-2-3条，指出问题根源
+- **失误1**：描述问题根源，说明对比赛的影响
+- **失误2**：描述问题根源，说明对比赛的影响
+- **失误3**：描述问题根源，说明对比赛的影响
 
 ### 📈 针对性提升建议
-结合 ${s.heroName} 英雄特性，2-3条可执行建议
+结合 ${s.heroName} 的英雄机制，给出具体可操作的建议：
+- **建议1**：具体操作方式
+- **建议2**：具体操作方式
+- **建议3**：具体操作方式
 
-### 💡 一句话总结`;
+### 💡 一句话总结
+用一句话说明本局最关键的改进方向。
+
+注意：
+1. 所有分析必须结合具体数据，不要泛泛而谈
+2. 针对 ${s.heroName} 的英雄机制给出专项建议（如剑圣的幻象利用、PA的暴击时机等）
+3. 💡一句话总结必须有完整内容，不能为空`;
 
   // 走服务端代理，避免浏览器 CORS 问题
   const res = await fetch("/api/analyze", {
@@ -119,9 +138,16 @@ function renderMd(text) {
   if (!text) return "";
   return text
     .replace(/### (.+)/g, '<h3 class="mh3">$1</h3>')
+    .replace(/## (.+)/g, '<h3 class="mh3">$1</h3>')
+    .replace(/# (.+)/g, '<h3 class="mh3">$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // 有序列表
+    .replace(/\n(\d+)\. (.+)/g, '<li class="mli"><span class="mnum">$1.</span> $2</li>')
+    .replace(/(<li[^>]*>.*?<\/li>\n?)+/gs, m => `<ul class="mul">${m}</ul>`)
+    // 无序列表
     .replace(/\n- (.+)/g, '<li class="mli">$1</li>')
     .replace(/(<li[^>]*>.*?<\/li>\n?)+/gs, m => `<ul class="mul">${m}</ul>`)
+    .replace(/\n---\n/g, '<hr class="mhr"/>')
     .replace(/\n\n/g, '<div class="sp"></div>')
     .replace(/\n/g, "<br/>");
 }
@@ -256,8 +282,10 @@ export default function Home() {
            color:var(--gold);letter-spacing:.06em;margin:16px 0 7px;
            padding-bottom:4px;border-bottom:1px solid var(--bd)}
       .mh3:first-child{margin-top:0}
-      .mul{padding-left:18px;margin:4px 0}
-      .mli{margin:3px 0}
+      .mul{padding-left:4px;margin:6px 0;list-style:none}
+      .mli{margin:6px 0;padding-left:4px;line-height:1.7}
+      .mnum{color:var(--gold);font-weight:700;margin-right:4px}
+      .mhr{border:none;border-top:1px solid var(--bd);margin:12px 0}
       .sp{margin:8px 0}
       strong{color:var(--gold)}
       .ptbl{width:100%;border-collapse:collapse;font-size:.85rem}
